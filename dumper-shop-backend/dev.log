@@ -1,0 +1,9 @@
+
+> dumper-shop-backend@0.0.1 dev
+> medusa develop
+
+[32minfo[39m:    redisUrl not found. A fake redis instance will be used.
+[32minfo[39m:    [Watcher] Using standard dev server (restart on file change)
+[32minfo[39m:    [Watcher] Watching filesystem to reload dev server on file change
+[32minfo[39m:    [Watcher] modified dev.log modified: restarting dev server
+[32minfo[39m:    [Watcher] Reloaded in 2.37ms

@@ -1,0 +1,13 @@
+{
+	"servers": {
+		"my-mcp-server-350d5611": {
+			"url": "https://docs.medusajs.com/mcp",
+			"type": "http"
+		},
+		"medusa": {
+			"type": "http",
+			"url": "https://docs.medusajs.com/mcp"
+		}
+	},
+	"inputs": []
+}
