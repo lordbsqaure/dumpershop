@@ -1,0 +1,22 @@
+{
+  "name": "dumper-shop",
+  "version": "1.0.0",
+  "description": "Full-stack e-commerce application",
+  "scripts": {
+    "dev": "CURRENT_DIR=$(pwd); osascript -e \"tell application \\\"Terminal\\\" to do script \\\"cd '${CURRENT_DIR}/dumper-shop-backend' && npm run dev\\\"\" -e \"tell application \\\"Terminal\\\" to do script \\\"cd '${CURRENT_DIR}/dumper-shop-frontend' && npm run dev\\\"\"",
+    "dev:frontend": "cd dumper-shop-frontend && npm run dev",
+    "dev:backend": "cd dumper-shop-backend && npm run dev",
+    "install:all": "npm install && cd dumper-shop-frontend && npm install && cd ../dumper-shop-backend && npm install"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  },
+  "keywords": [
+    "e-commerce",
+    "shop",
+    "nextjs",
+    "nodejs"
+  ],
+  "author": "",
+  "license": "ISC"
+}
