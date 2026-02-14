@@ -1,32 +1,10 @@
-import { useState } from 'react';
+import { getPermanentImage } from '../utils/imageStorage';
 
-// Image cache hook for client-side image caching
+// Image cache hook for client-side image caching with permanent storage
 export const useImageCache = () => {
-  const [cache] = useState(() => new Map<string, string>());
-
   const getCachedImage = async (url: string): Promise<string> => {
-    // Check if image is already cached
-    if (cache.has(url)) {
-      return cache.get(url)!;
-    }
-
-    try {
-      // Download the image
-      const response = await fetch(url);
-      const blob = await response.blob();
-
-      // Create object URL for local display
-      const objectUrl = URL.createObjectURL(blob);
-
-      // Cache the object URL
-      cache.set(url, objectUrl);
-
-      return objectUrl;
-    } catch (error) {
-      console.error('Failed to cache image:', error);
-      // Return original URL if caching fails
-      return url;
-    }
+    // Use permanent storage that persists across sessions
+    return getPermanentImage(url);
   };
 
   return { getCachedImage };
@@ -35,7 +13,6 @@ export const useImageCache = () => {
 // Utility function for direct caching (can be used outside React components)
 class ImageCacheManager {
   private static instance: ImageCacheManager;
-  private cache: Map<string, string> = new Map();
 
   private constructor() {}
 
@@ -47,36 +24,8 @@ class ImageCacheManager {
   }
 
   async getCachedImage(url: string): Promise<string> {
-    // Check if image is already cached
-    if (this.cache.has(url)) {
-      return this.cache.get(url)!;
-    }
-
-    try {
-      // Download the image
-      const response = await fetch(url);
-      const blob = await response.blob();
-
-      // Create object URL for local display
-      const objectUrl = URL.createObjectURL(blob);
-
-      // Cache the object URL
-      this.cache.set(url, objectUrl);
-
-      return objectUrl;
-    } catch (error) {
-      console.error('Failed to cache image:', error);
-      // Return original URL if caching fails
-      return url;
-    }
-  }
-
-  // Cleanup method to revoke object URLs when needed
-  clearCache() {
-    this.cache.forEach((url) => {
-      URL.revokeObjectURL(url);
-    });
-    this.cache.clear();
+    // Use permanent storage that persists across sessions
+    return getPermanentImage(url);
   }
 }
 

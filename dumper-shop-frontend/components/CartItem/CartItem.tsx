@@ -32,18 +32,48 @@ export function CartItem({
   const hasDiscount = originalPrice && originalPrice > price;
 
   return (
-    <Card shadow="sm" padding="sm" radius="lg" withBorder>
-      <Card.Section withBorder={false} pos="relative">
-        <Image src={image} alt={title} h={{ base: 140, md: 150 }} w="100%" fit="cover" />
+    <Card shadow="sm" padding="xs" pt={0} radius="md" withBorder pos="relative">
+      <ActionIcon
+        variant="filled"
+        color="red"
+        size="md"
+        onClick={onRemove}
+        aria-label="Remove item"
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 6,
+          zIndex: 2,
+          boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+        }}
+      >
+        <IconTrash size={14} />
+      </ActionIcon>
+
+      <Card.Section withBorder={false} pos="relative" style={{ overflow: 'hidden' }}>
+        <Image
+          src={image || 'https://via.placeholder.com/200x160?text=No+Image'}
+          alt={title}
+          h={{ base: 250, sm: 230 }}
+          w="100%"
+          fit="cover"
+          style={{ 
+            minHeight: 200, 
+            display: 'block',
+            objectFit: 'cover'
+          }}
+          fallbackSrc="https://via.placeholder.com/200x160?text=No+Image"
+        />
         {hasDiscount && (
           <Badge
             color="red"
-            size="sm"
+            size="xs"
             radius="sm"
             style={{
               position: 'absolute',
-              top: '0.5rem',
-              right: '0.5rem',
+              top: 6,
+              left: 6,
+              zIndex: 1,
             }}
           >
             SALE
@@ -51,8 +81,8 @@ export function CartItem({
         )}
       </Card.Section>
 
-      <Stack gap="xs" mt="sm">
-        <Text fw={700} size="sm" lineClamp={2}>
+      <Stack gap={4} mt="xs" style={{ paddingBottom: 0 }}>
+        <Text fw={600} size="xs" lineClamp={2}>
           {title}
         </Text>
 
@@ -62,14 +92,13 @@ export function CartItem({
           </Text>
         )}
 
-        {/* Unit Price */}
-        <Group gap="xs" align="center">
+        <Group gap={4} align="center" wrap="nowrap">
           {hasDiscount && (
             <Text size="xs" td="line-through" c="dimmed">
               {formatAmount(originalPrice!)}
             </Text>
           )}
-          <Text size="sm" fw={600} c={hasDiscount ? 'red' : 'dark'}>
+          <Text size="xs" fw={600} c={hasDiscount ? 'red' : 'dark'}>
             {formatAmount(price)}
           </Text>
           <Text size="xs" c="dimmed">
@@ -77,24 +106,23 @@ export function CartItem({
           </Text>
         </Group>
 
-        {/* Quantity and Total */}
-        <Group justify="space-between" align="center" mt="xs" wrap="nowrap">
+        <Group justify="space-between" align="flex-end" wrap="nowrap" gap="xs" mt={4}>
           <NumberInput
             value={quantity}
             onChange={(value) => onQuantityChange(Number(value) || 1)}
             min={1}
-            size="sm"
-            w={{ base: 80, sm: 90 }}
+            size="xs"
+            w={{ base: 64, sm: 72 }}
+            flex="0 0 auto"
             styles={{
               input: {
                 textAlign: 'center',
-                fontSize: '14px',
+                fontSize: 12,
                 fontWeight: 600,
               },
             }}
           />
-
-          <Stack gap={0} style={{ flexGrow: 1, alignItems: 'flex-end' }}>
+          <Stack gap={0} align="flex-end" style={{ flex: 1, minWidth: 0 }}>
             <Text size="xs" c="dimmed">
               Total
             </Text>
@@ -103,20 +131,10 @@ export function CartItem({
                 {formatAmount(originalSubtotal)}
               </Text>
             )}
-            <Text fw={700} c="purple" size="md">
+            <Text fw={600} c="purple" size="sm">
               {formatAmount(subtotal)}
             </Text>
           </Stack>
-
-          <ActionIcon
-            variant="subtle"
-            color="red"
-            size="md"
-            onClick={onRemove}
-            style={{ flexShrink: 0 }}
-          >
-            <IconTrash size={16} />
-          </ActionIcon>
         </Group>
       </Stack>
     </Card>

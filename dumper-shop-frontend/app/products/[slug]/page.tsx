@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { useParams } from 'next/navigation';
+import { useParams, useSearchParams } from 'next/navigation';
 import {
   IconArrowRight,
   IconHeart,
@@ -59,9 +59,11 @@ export default function ProductDetailsPage() {
   const [reviewComment, setReviewComment] = useState('');
   const [reviews, setReviews] = useState<any[]>([]);
   const [relatedProducts, setRelatedProducts] = useState<Product[]>([]);
+  const [searchResults, setSearchResults] = useState<Product[]>([]);
   const [isAdding, setIsAdding] = useState(false);
   const [added, setAdded] = useState(false);
   const params = useParams();
+  const searchParams = useSearchParams();
   // Fetch product details on mount
   useEffect(() => {
     const fetchProductDetails = async () => {
@@ -112,7 +114,7 @@ export default function ProductDetailsPage() {
                 : 0,
           originalPrice:
             productData.variants?.[0]?.calculated_price?.original_amount !== undefined
-              ? productData.variants[0].calculated_price.original_amount / 100
+              ? productData.variants[0].calculated_price.original_amount
               : undefined,
           reviewCount: reviewsFromApi.length ?? 0,
         };
@@ -148,14 +150,47 @@ export default function ProductDetailsPage() {
             image: p.thumbnail || p.images?.[0]?.url || PLACEHOLDER_IMAGE,
             price:
               p.variants?.[0]?.calculated_price?.calculated_amount !== undefined
-                ? p.variants[0].calculated_price.calculated_amount / 100
+                ? p.variants[0].calculated_price.calculated_amount
                 : p.variants?.[0]?.prices?.[0]?.amount !== undefined
-                  ? p.variants[0].prices[0].amount / 100
+                  ? p.variants[0].prices[0].amount
                   : 0,
             reviewCount: p.reviews?.length ?? 0,
           }));
 
           setRelatedProducts(processedRelated);
+        }
+
+        // Check if user came from search and fetch similar products
+        const searchQuery = searchParams?.get('q');
+        if (searchQuery && searchQuery.trim()) {
+          try {
+            const { products: searchItemsRaw } = await sdk.store.product.list({
+              q: searchQuery.trim(),
+              region_id: resolvedRegionId,
+              fields: '*variants.calculated_price,*images',
+              limit: 8,
+            });
+
+            const searchItems: Product[] = (searchItemsRaw || []).filter(
+              (p: Product) => p.id !== productData.id
+            );
+
+            const processedSearchResults = searchItems.slice(0, 8).map((p) => ({
+              ...p,
+              image: p.thumbnail || p.images?.[0]?.url || PLACEHOLDER_IMAGE,
+              price:
+                p.variants?.[0]?.calculated_price?.calculated_amount !== undefined
+                  ? p.variants[0].calculated_price.calculated_amount
+                  : p.variants?.[0]?.prices?.[0]?.amount !== undefined
+                    ? p.variants[0].prices[0].amount
+                    : 0,
+              reviewCount: p.reviews?.length ?? 0,
+            }));
+
+            setSearchResults(processedSearchResults);
+          } catch (searchError) {
+            console.error('Failed to fetch search results:', searchError);
+          }
         }
 
         setError(null);
@@ -438,6 +473,28 @@ export default function ProductDetailsPage() {
             </Tabs.Panel>
           </Tabs>
         </Card>
+
+        {/* Search Results */}
+        {searchResults.length > 0 && (
+          <Stack gap="md">
+            <Group justify="space-between" align="center">
+              <Title order={2}>Similar Products</Title>
+              <Button
+                variant="subtle"
+                rightSection={<IconArrowRight size={16} />}
+                component={Link}
+                href={`/products?q=${encodeURIComponent(searchParams?.get('q') || '')}`}
+              >
+                View All
+              </Button>
+            </Group>
+            <SimpleGrid cols={{ base: 2, sm: 2, md: 3, lg: 4 }} spacing="lg">
+              {searchResults.map((product) => (
+                <ProductCard key={product.id} {...product} />
+              ))}
+            </SimpleGrid>
+          </Stack>
+        )}
 
         {/* Related Products */}
         {relatedProducts.length > 0 && (

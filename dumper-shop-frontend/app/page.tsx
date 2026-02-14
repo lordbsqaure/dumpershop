@@ -53,6 +53,7 @@ const testimonials = [
 export default function HomePage() {
   const [mobileSearchQuery, setMobileSearchQuery] = useState('');
   const [featuredProducts, setFeaturedProducts] = useState<{ product: Product }[]>([]);
+  const [categories, setCategories] = useState<any[]>([]);
   const PLACEHOLDER_IMAGE = 'https://via.placeholder.com/400x300?text=No+Image';
 
   useEffect(() => {
@@ -70,6 +71,20 @@ export default function HomePage() {
     };
 
     fetchFeatured();
+  }, []);
+
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const res = await sdk.client.fetch('/store/product-categories');
+        const cats = (res as any)?.product_categories || [];
+        setCategories(cats);
+      } catch (error) {
+        console.error('Failed to fetch categories:', error);
+      }
+    };
+
+    fetchCategories();
   }, []);
 
   return (
@@ -163,7 +178,7 @@ export default function HomePage() {
               Featured Collections
             </Title>
             <SimpleGrid cols={{ base: 1, md: 3 }} spacing="lg">
-              <CustomLink href="/products?category=electronics">
+              <CustomLink href={`/products?category=${categories.find(c => c.name?.toLowerCase() === 'electronics' || c.handle?.toLowerCase() === 'electronics')?.id || 'electronics'}`}>
                 <Card padding={0} radius="lg" style={{ overflow: 'hidden', position: 'relative' }}>
                   <div style={{ position: 'relative', height: 300 }}>
                     <img
@@ -207,7 +222,7 @@ export default function HomePage() {
                 </Card>
               </CustomLink>
 
-              <CustomLink href="/products?category=fashion">
+              <CustomLink href={`/products?category=${categories.find(c => c.name?.toLowerCase() === 'fashion' || c.handle?.toLowerCase() === 'fashion')?.id || 'fashion'}`}>
                 <Card padding={0} radius="lg" style={{ overflow: 'hidden', position: 'relative' }}>
                   <div style={{ position: 'relative', height: 300 }}>
                     <img
@@ -251,7 +266,7 @@ export default function HomePage() {
                 </Card>
               </CustomLink>
 
-              <CustomLink href="/products?category=home-garden">
+              <CustomLink href={`/products?category=${categories.find(c => c.name?.toLowerCase().includes('home') || c.handle?.toLowerCase().includes('home'))?.id || 'home-garden'}`}>
                 <Card padding={0} radius="lg" style={{ overflow: 'hidden', position: 'relative' }}>
                   <div style={{ position: 'relative', height: 300 }}>
                     <img

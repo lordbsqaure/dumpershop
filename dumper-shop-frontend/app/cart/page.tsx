@@ -42,6 +42,7 @@ export default function CartPage() {
   const [shipping, setShipping] = useState(0);
   const [tax, setTax] = useState(0);
   const [total, setTotal] = useState(0);
+  const [itemOrder, setItemOrder] = useState<string[]>([]);
   const fetchCart = async () => {
     try {
       const cartId = localStorage.getItem('cart_id');
@@ -53,15 +54,11 @@ export default function CartPage() {
       const { cart } = await sdk.store.cart.retrieve(cartId);
 
       if (cart && cart.items) {
-        console.log('Cart items:', cart.items); // Debug log
         const items: CartItemType[] = cart.items.map((item: any) => {
-          console.log('Item data:', item); // Debug each item
           const originalPrice =
             item.original_unit_price ||
             item.variant?.calculated_price?.original_amount ||
             item.variant?.original_price;
-          console.log('Original price:', originalPrice, 'Unit price:', item.unit_price);
-
           return {
             id: item.id,
             title: item.title || item.product?.title || 'Product',
@@ -74,6 +71,19 @@ export default function CartPage() {
             variant_id: item.variant_id,
             product_id: item.product_id || item.variant?.product_id,
           };
+        });
+
+        // Initialize or maintain item order
+        setItemOrder(prev => {
+          const newOrder = items.map(item => item.id);
+          if (prev.length === 0) {
+            return newOrder;
+          }
+          // Maintain existing order, add new items at the end
+          const orderedItems = prev
+            .filter(id => newOrder.includes(id))
+            .concat(newOrder.filter(id => !prev.includes(id)));
+          return orderedItems;
         });
 
         setCartItems(items);
@@ -126,7 +136,14 @@ export default function CartPage() {
           product_id: item.product_id || item.variant?.product_id,
         }));
 
-        setCartItems(items);
+        // Sort items according to the stored order
+        const sortedItems = items.sort((a, b) => {
+          const indexA = itemOrder.indexOf(a.id);
+          const indexB = itemOrder.indexOf(b.id);
+          return indexA - indexB;
+        });
+
+        setCartItems(sortedItems);
         setSubtotal(cart.subtotal || 0);
         setShipping(cart.shipping_total || 0);
         setTax(cart.tax_total || 0);
@@ -142,48 +159,9 @@ export default function CartPage() {
       const cartId = localStorage.getItem('cart_id');
       if (!cartId) return;
 
-      // Find the current item to calculate the quantity change
-      const currentItem = cartItems.find(item => item.id === id);
-      const quantityChange = currentItem ? -currentItem.quantity : 0;
-
-      const response = await sdk.store.cart.deleteLineItem(cartId, id);
-      console.log('Delete response:', response); // Debug log
-
-      // Trigger custom event to update cart badge in header
+      await sdk.store.cart.deleteLineItem(cartId, id);
       window.dispatchEvent(new CustomEvent('cart-update'));
-
-      const carts = response.cart || response;
-      console.log('Cart after delete:', carts); // Debug log
-      console.log('Cart items:', carts?.items); // Debug log
-      const cart = await fetchCart();
-      // Update local state - handle both empty and non-empty carts
-      // if (cart) {
-      //   const items: CartItemType[] = (cart.items || []).map((item: any) => {
-      //     const originalPrice =
-      //       item.original_unit_price ||
-      //       item.variant?.calculated_price?.original_amount ||
-      //       item.variant?.original_price;
-
-      //     return {
-      //       id: item.id,
-      //       title: item.title || item.product?.title || 'Product',
-      //       price: item.unit_price || 0,
-      //       originalPrice:
-      //         originalPrice && originalPrice > item.unit_price ? originalPrice : undefined,
-      //       image: item.thumbnail || item.product?.thumbnail || '',
-      //       quantity: item.quantity,
-      //       variant: item.variant?.title,
-      //       variant_id: item.variant_id,
-      //       product_id: item.product_id || item.variant?.product_id,
-      //     };
-      //   });
-
-      //   setCartItems(items);
-      //   setSubtotal(cart.subtotal || 0);
-      //   setShipping(cart.shipping_total || 0);
-      //   setTax(cart.tax_total || 0);
-      //   setTotal(cart.total || 0);
-      // }
+      await fetchCart();
     } catch (error) {
       console.error('Failed to remove item:', error);
     }
@@ -227,7 +205,7 @@ export default function CartPage() {
   }
 
   return (
-    <Container size="xl" py="md" pb={{ base: 100, lg: 'md' }}>
+    <Container size="xl" pt={0} pb={{ base: 100, lg: 'md' }} px="md">
       <Stack gap="lg">
         {/* Breadcrumbs */}
         <Breadcrumbs>{breadcrumbItems}</Breadcrumbs>
@@ -235,9 +213,9 @@ export default function CartPage() {
         <Title order={1}>Shopping Cart</Title>
 
         <Grid>
-          {/* Cart Items */}
-          <Grid.Col span={{ base: 12, lg: 8 }}>
-            <SimpleGrid cols={{ base: 2, md: 3 }} spacing="md">
+          {/* Cart Items - 1 col on mobile for better card layout, 2–3 on larger */}
+          <Grid.Col span={{ base: 12, lg: 9 }}>
+            <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }} spacing="md">
               {cartItems.map((item) => (
                 <CartItem
                   key={item.id}
@@ -250,7 +228,7 @@ export default function CartPage() {
           </Grid.Col>
 
           {/* Desktop Order Summary */}
-          <Grid.Col span={{ base: 12, lg: 4 }} visibleFrom="lg">
+          <Grid.Col span={{ base: 12, lg: 3 }} visibleFrom="lg">
             <Card padding="lg" radius="md" withBorder>
               <Stack gap="md">
                 <Title order={3}>Order Summary</Title>

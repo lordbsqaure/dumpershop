@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { sdk } from './lib/sdk';
+import { useCartStore } from './cart-store';
 
 interface User {
   id: string;
@@ -33,46 +34,13 @@ export const phoneToEmail = (phone: string): string => {
 };
 
 // Helper functions for localStorage management
-const AUTH_CACHE_KEY = 'auth_cache';
 const USER_CACHE_KEY = 'user_cache';
-
-const saveAuthToCache = (authData: { token: string; expiresAt: number }) => {
-  if (typeof window !== 'undefined') {
-    localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(authData));
-  }
-};
-
-const getAuthFromCache = () => {
-  if (typeof window !== 'undefined') {
-    const cached = localStorage.getItem(AUTH_CACHE_KEY);
-    if (cached) {
-      try {
-        const authData = JSON.parse(cached);
-        // Check if token is expired
-        if (authData.expiresAt && authData.expiresAt > Date.now()) {
-          return authData;
-        }
-        // Token expired, clear cache
-        localStorage.removeItem(AUTH_CACHE_KEY);
-      } catch (e) {
-        console.error('Error parsing auth cache:', e);
-        localStorage.removeItem(AUTH_CACHE_KEY);
-      }
-    }
-  }
-  return null;
-};
-
-const clearAuthCache = () => {
-  if (typeof window !== 'undefined') {
-    localStorage.removeItem(AUTH_CACHE_KEY);
-    localStorage.removeItem(USER_CACHE_KEY);
-  }
-};
+const AUTH_STATE_KEY = 'auth_state';
 
 const saveUserToCache = (user: User) => {
   if (typeof window !== 'undefined') {
     localStorage.setItem(USER_CACHE_KEY, JSON.stringify(user));
+    localStorage.setItem(AUTH_STATE_KEY, JSON.stringify({ isAuthenticated: true, timestamp: Date.now() }));
   }
 };
 
@@ -101,27 +69,42 @@ const getUserFromCache = (): User | null => {
   return null;
 };
 
+const getAuthStateFromCache = (): { isAuthenticated: boolean } | null => {
+  if (typeof window !== 'undefined') {
+    const cached = localStorage.getItem(AUTH_STATE_KEY);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        return parsed;
+      } catch (e) {
+        console.error('Error parsing auth state:', e);
+        localStorage.removeItem(AUTH_STATE_KEY);
+      }
+    }
+  }
+  return null;
+};
+
+const clearAuthCache = () => {
+  if (typeof window !== 'undefined') {
+    localStorage.removeItem(USER_CACHE_KEY);
+    localStorage.removeItem(AUTH_STATE_KEY);
+  }
+};
+
 export const useAuthStore = create<AuthState>((set, get) => ({
   user: getUserFromCache(),
   isLoading: false,
-  isAuthenticated: !!getAuthFromCache(),
+  isAuthenticated: !!getAuthStateFromCache()?.isAuthenticated,
 
   login: async (phone: string, password: string) => {
     set({ isLoading: true });
     try {
       // Authenticate with phone number (using phone as email for Medusa)
-      const authResult = await sdk.auth.login('customer', 'emailpass', {
+      await sdk.auth.login('customer', 'emailpass', {
         email: phoneToEmail(phone),
         password,
       });
-
-      // Cache auth token with expiration (24 hours)
-      if (authResult?.token) {
-        saveAuthToCache({
-          token: authResult.token,
-          expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
-        });
-      }
 
       // After successful authentication, retrieve customer data
       const { customer } = await sdk.store.customer.retrieve();
@@ -135,7 +118,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           last_name: customer.last_name || '',
         };
 
-        // Cache user data
+        // Cache user data and auth state
         saveUserToCache(userData);
 
         set({
@@ -143,6 +126,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           isAuthenticated: true,
           isLoading: false,
         });
+
+        // Restore cart for this user (from saved cart or server)
+        useCartStore.getState().setUser(userData.id);
+        await useCartStore.getState().restoreCartAfterLogin();
       } else {
         set({
           user: null,
@@ -186,18 +173,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       );
 
       // After registration, automatically login to get a proper auth token
-      const authResult = await sdk.auth.login('customer', 'emailpass', {
+      await sdk.auth.login('customer', 'emailpass', {
         email: email,
         password: data.password,
       });
-
-      // Cache auth token with expiration (24 hours)
-      if (authResult?.token) {
-        saveAuthToCache({
-          token: authResult.token,
-          expiresAt: Date.now() + 24 * 60 * 60 * 1000, // 24 hours
-        });
-      }
 
       // Retrieve the customer data after login
       const { customer: retrievedCustomer } = await sdk.store.customer.retrieve();
@@ -222,7 +201,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         };
       }
 
-      // Cache user data
+      // Cache user data and auth state
       saveUserToCache(userData);
 
       set({
@@ -230,6 +209,9 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticated: true,
         isLoading: false,
       });
+
+      useCartStore.getState().setUser(userData.id);
+      await useCartStore.getState().restoreCartAfterLogin();
     } catch (error) {
       console.error('Registration failed:', error);
       set({ isLoading: false });
@@ -238,13 +220,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
   },
 
   logout: async () => {
+    // Save current cart for this user and clear cart state (so UI shows empty)
+    useCartStore.getState().setUser(null);
     try {
-      // Call SDK logout to clear session
       await sdk.auth.logout();
     } catch (error) {
       console.error('SDK logout failed:', error);
     }
-    // Clear local state and cache
     clearAuthCache();
     set({
       user: null,
@@ -256,10 +238,10 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     set({ isLoading: true });
 
     // First, check cache for existing auth data
-    const cachedAuth = getAuthFromCache();
+    const cachedAuthState = getAuthStateFromCache();
     const cachedUser = getUserFromCache();
 
-    if (cachedAuth && cachedUser) {
+    if (cachedAuthState?.isAuthenticated && cachedUser) {
       // Use cached data if valid
       set({
         user: cachedUser,
@@ -282,7 +264,7 @@ export const useAuthStore = create<AuthState>((set, get) => ({
           last_name: customer.last_name,
         };
 
-        // Cache user data
+        // Cache user data and auth state
         saveUserToCache(userData);
 
         set({

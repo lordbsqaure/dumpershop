@@ -17,7 +17,6 @@ import {
   useMantineTheme,
 } from '@mantine/core';
 import { useCartStore } from '../../stores/cart-store';
-import { sdk } from '../../stores/lib/sdk';
 import { CustomLink } from '../Link/Link';
 import { SearchBar } from '../SearchBar/SearchBar';
 
@@ -33,59 +32,42 @@ export function Header() {
   const [searchQuery, setSearchQuery] = useState('');
   const pathname = usePathname();
   const theme = useMantineTheme();
-  const [cartItems, setCartItems] = useState<any[]>([]);
-  const [cartItemCount, setCartItemCount] = useState(0);
+  // Cart store drives the badge; we sync from localStorage so badge updates when items are added via ProductCard/product page
+  const cartItems = useCartStore((s) => s.items ?? []);
+  const cartId = useCartStore((s) => s.cartId);
+  const refreshCart = useCartStore((s) => s.refreshCart);
+  const syncFromStorage = useCartStore((s) => s.syncFromStorage);
+  const cartItemCount = cartItems.reduce((sum, item) => sum + (item.quantity ?? 1), 0);
 
-  // Fetch cart data
-  const fetchCart = async () => {
-    try {
-      const cartId = localStorage.getItem('cart_id');
-      if (!cartId) {
-        setCartItemCount(0);
-        return;
-      }
+  // On mount: if cart_id is in localStorage but store is empty, sync and refresh so badge shows
+  useEffect(() => {
+    syncFromStorage().catch(() => {});
+  }, []);
 
-      const { cart } = await sdk.store.cart.retrieve(cartId);
-      if (cart && cart.items) {
-        setCartItems(cart.items);
-        const count = cart.items.length;
-        setCartItemCount(count);
+  // When ProductCard/product page adds to cart they fire 'cart-update' — refresh store so badge updates
+  useEffect(() => {
+    const onCartUpdate = () => {
+      if (useCartStore.getState().cartId) {
+        useCartStore.getState().refreshCart().catch(() => {});
       } else {
-        setCartItemCount(0);
+        useCartStore.getState().syncFromStorage().catch(() => {});
       }
-    } catch (error) {
-      console.error('Failed to fetch cart:', error);
-      setCartItemCount(0);
-    }
-  };
-
-  // Initialize cart on mount
-  useEffect(() => {
-    fetchCart();
-  }, []);
-
-  // Listen for cart updates from custom events
-  useEffect(() => {
-    const handleCartUpdate = () => {
-      console.log('Cart update event received');
-      // Fetch the latest cart data from the API
-      fetchCart();
     };
-
-    window.addEventListener('cart-update', handleCartUpdate);
-    return () => window.removeEventListener('cart-update', handleCartUpdate);
+    window.addEventListener('cart-update', onCartUpdate);
+    return () => window.removeEventListener('cart-update', onCartUpdate);
   }, []);
 
-  // Refresh cart when pathname changes (to ensure we have latest data)
+  // Sync store cartId to localStorage when we have one. Do NOT remove when cartId is null (preserve on refresh).
   useEffect(() => {
-    fetchCart();
-  }, [pathname]);
+    if (typeof window === 'undefined' || !cartId) return;
+    localStorage.setItem('cart_id', cartId);
+  }, [cartId]);
 
-  // Debug: log cart item count
+  // Refresh from server when pathname or cartId changes
   useEffect(() => {
-    console.log('Cart items:', cartItems);
-    console.log('Cart item count:', cartItemCount);
-  }, [cartItems, cartItemCount]);
+    if (!cartId) return;
+    refreshCart().catch(() => {});
+  }, [pathname, cartId]);
 
   return (
     <>
@@ -159,38 +141,36 @@ export function Header() {
                     <IconUser size={18} />
                   </ActionIcon>
                 </CustomLink>
-                <div style={{ position: 'relative', display: 'inline-block' }}>
+                <Box component="span" style={{ position: 'relative', display: 'inline-flex' }}>
                   <CustomLink href="/cart">
                     <ActionIcon variant="subtle" size="md">
                       <IconShoppingCart size={20} />
                     </ActionIcon>
                   </CustomLink>
                   {cartItemCount > 0 && (
-                    <div
+                    <Badge
+                      size="sm"
+                      circle
+                      color="red"
+                      variant="filled"
                       style={{
                         position: 'absolute',
-                        top: '-4px',
-                        right: '-4px',
-                        backgroundColor: '#fa5252',
-                        color: 'white',
-                        fontSize: '10px',
-                        fontWeight: 'bold',
-                        minWidth: '18px',
-                        height: '18px',
-                        borderRadius: '50%',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        border: '2px solid white',
-                        zIndex: 10,
-                        boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                        top: -4,
+                        right: -4,
+                        minWidth: 18,
+                        height: 18,
+                        fontSize: 10,
+                        fontWeight: 700,
+                        padding: 0,
                         pointerEvents: 'none',
+                        border: '2px solid white',
+                        boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                       }}
                     >
                       {cartItemCount > 99 ? '99+' : cartItemCount}
-                    </div>
+                    </Badge>
                   )}
-                </div>
+                </Box>
               </Group>
             </Group>
 
@@ -201,38 +181,36 @@ export function Header() {
                   <IconUser size={18} />
                 </ActionIcon>
               </CustomLink>
-              <div style={{ position: 'relative', display: 'inline-block' }}>
+              <Box component="span" style={{ position: 'relative', display: 'inline-flex' }}>
                 <CustomLink href="/cart">
                   <ActionIcon variant="subtle" size="md">
                     <IconShoppingCart size={20} />
                   </ActionIcon>
                 </CustomLink>
                 {cartItemCount > 0 && (
-                  <div
+                  <Badge
+                    size="sm"
+                    circle
+                    color="red"
+                    variant="filled"
                     style={{
                       position: 'absolute',
-                      top: '-4px',
-                      right: '-4px',
-                      backgroundColor: '#fa5252',
-                      color: 'white',
-                      fontSize: '10px',
-                      fontWeight: 'bold',
-                      minWidth: '18px',
-                      height: '18px',
-                      borderRadius: '50%',
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      border: '2px solid white',
-                      zIndex: 10,
-                      boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
+                      top: -4,
+                      right: -4,
+                      minWidth: 18,
+                      height: 18,
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: 0,
                       pointerEvents: 'none',
+                      border: '2px solid white',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
                     }}
                   >
                     {cartItemCount > 99 ? '99+' : cartItemCount}
-                  </div>
+                  </Badge>
                 )}
-              </div>
+              </Box>
               <Burger opened={opened} onClick={() => setOpened(true)} />
             </Group>
           </Group>

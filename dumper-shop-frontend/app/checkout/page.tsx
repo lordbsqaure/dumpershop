@@ -3,10 +3,12 @@
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { IconCheck, IconCreditCard, IconTruck } from '@tabler/icons-react';
+import { IconCheck, IconCreditCard, IconShieldCheck, IconTrash, IconTruck } from '@tabler/icons-react';
 import {
+  ActionIcon,
   Alert,
   Anchor,
+  Badge,
   Breadcrumbs,
   Button,
   Card,
@@ -51,6 +53,7 @@ export default function CheckoutPage() {
   const [loading, setLoading] = useState(false);
   const [cartLoading, setCartLoading] = useState(true);
   const [cartItems, setCartItems] = useState<CartItemType[]>([]);
+  const [updatingItems, setUpdatingItems] = useState<Set<string>>(new Set());
   const [cartId, setCartId] = useState<string | null>(null);
   const [subtotal, setSubtotal] = useState(0);
   const [shipping, setShipping] = useState(0);
@@ -113,6 +116,55 @@ export default function CheckoutPage() {
 
     fetchCart();
   }, []);
+
+  const handleRemoveItem = async (itemId: string) => {
+    if (!cartId) return;
+    
+    setUpdatingItems(prev => new Set(prev).add(itemId));
+    
+    try {
+      await sdk.store.cart.deleteLineItem(cartId, itemId);
+      
+      // Refresh cart
+      const { cart } = await sdk.store.cart.retrieve(cartId);
+      if (cart && cart.items) {
+        const items: CartItemType[] = cart.items.map((item: any) => {
+          const originalPrice =
+            item.original_unit_price ||
+            item.variant?.calculated_price?.original_amount ||
+            item.variant?.original_price;
+
+          return {
+            id: item.id,
+            title: item.title || item.product?.title || 'Product',
+            price: item.unit_price || 0,
+            originalPrice:
+              originalPrice && originalPrice > item.unit_price ? originalPrice : undefined,
+            image: item.thumbnail || item.product?.thumbnail || '',
+            quantity: item.quantity,
+            variant: item.variant?.title,
+            variant_id: item.variant_id,
+            product_id: item.product_id || item.variant?.product_id,
+          };
+        });
+
+        setCartItems(items);
+        setSubtotal(cart.subtotal || 0);
+        setShipping(cart.shipping_total || 0);
+        setTax(cart.tax_total || 0);
+        setTotal(cart.total || 0);
+      }
+    } catch (err) {
+      console.error('Failed to remove item:', err);
+      setError('Failed to remove item. Please try again.');
+    } finally {
+      setUpdatingItems(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(itemId);
+        return newSet;
+      });
+    }
+  };
 
   const handleCheckoutSubmit = async (data: CheckoutData) => {
     if (!cartId) {
@@ -319,43 +371,119 @@ export default function CheckoutPage() {
 
           {/* Order Summary Sidebar */}
           <Grid.Col span={{ base: 12, lg: 4 }}>
-            <Card padding="lg" radius="md" withBorder>
-              <Stack gap="md">
-                <Title order={3}>Order Summary</Title>
+            <Card 
+              padding={{ base: '0.75rem', sm: '1rem', md: '1.25rem', lg: '1.5rem' }} 
+              radius="lg" 
+              withBorder 
+              shadow="sm"
+              style={{ position: 'sticky', top: 80 }}
+            >
+              <Stack gap={{ base: '0.75rem', sm: '1rem' }}>
+                <Group justify="space-between" align="center">
+                  <Title order={{ base: 4, sm: 3 }}>Order Summary</Title>
+                  <Badge variant="light" color="purple" size={{ base: 'md', sm: 'lg' }}>
+                    {cartItems.length} {cartItems.length === 1 ? 'item' : 'items'}
+                  </Badge>
+                </Group>
 
                 {/* Cart Items */}
-                <Stack gap="sm">
+                <Stack gap={{ base: '0.5rem', sm: '0.75rem' }}>
                   {cartItems.map((item) => (
-                    <Group key={item.id} justify="space-between" align="flex-start">
-                      <Group gap="sm" style={{ flex: 1 }}>
-                        <img
-                          src={item.image}
-                          alt={item.title}
+                    <Card 
+                      key={item.id} 
+                      padding={{ base: '0.5rem', sm: '0.75rem' }} 
+                      radius="md" 
+                      withBorder 
+                      style={{ backgroundColor: 'var(--mantine-color-gray-0)' }}
+                    >
+                      <div style={{ position: 'relative' }}>
+                        <ActionIcon
+                          variant="filled"
+                          color="red"
+                          size={{ base: '1.5rem', sm: '1.75rem' }}
                           style={{
-                            width: 50,
-                            height: 50,
-                            objectFit: 'cover',
-                            borderRadius: 'var(--mantine-radius-sm)',
+                            position: 'absolute',
+                            top: '-0.5rem',
+                            right: '-0.5rem',
+                            zIndex: 10,
                           }}
-                        />
-                        <div style={{ flex: 1 }}>
-                          <Text size="sm" fw={600} lineClamp={2}>
-                            {item.title}
-                          </Text>
-                          <Text size="xs" c="dimmed">
-                            Qty: {item.quantity}
-                          </Text>
-                          {item.variant && (
-                            <Text size="xs" c="dimmed">
-                              Variant: {item.variant}
-                            </Text>
-                          )}
-                        </div>
-                      </Group>
-                      <Text size="sm" fw={600}>
-                        {formatAmount(item.price * item.quantity)}
-                      </Text>
-                    </Group>
+                          onClick={() => handleRemoveItem(item.id)}
+                          disabled={updatingItems.has(item.id)}
+                          loading={updatingItems.has(item.id)}
+                        >
+                          <IconTrash size={14} />
+                        </ActionIcon>
+                        <Group gap="xs" justify="space-between" align="flex-start">
+                          <Group gap="xs" style={{ flex: 1 }}>
+                            <div style={{ position: 'relative', flexShrink: 0 }}>
+                              <img
+                                src={item.image}
+                                alt={item.title}
+                                style={{
+                                  width: '3.5rem',
+                                  height: '3.5rem',
+                                  objectFit: 'cover',
+                                  borderRadius: 'var(--mantine-radius-md)',
+                                }}
+                              />
+                              <Badge
+                                size="xs"
+                                variant="filled"
+                                style={{
+                                  position: 'absolute',
+                                  bottom: '-0.125rem',
+                                  right: '-0.125rem',
+                                  backgroundColor: 'var(--mantine-color-purple-6)',
+                                }}
+                              >
+                                {item.quantity}
+                              </Badge>
+                            </div>
+                            <div style={{ flex: 1, minWidth: 0 }}>
+                              <Text 
+                                size={{ base: '0.75rem', sm: '0.875rem' }} 
+                                fw={600} 
+                                lineClamp={2} 
+                                mb={{ base: '0.25rem', sm: '0.5rem' }}
+                                style={{ fontSize: '0.875rem', lineHeight: '1.25rem' }}
+                              >
+                                {item.title}
+                              </Text>
+                              {item.variant && (
+                                <Text 
+                                  size="xs" 
+                                  c="dimmed" 
+                                  mb={{ base: '0.25rem', sm: '0.5rem' }}
+                                  style={{ fontSize: '0.75rem', lineHeight: '1.125rem' }}
+                                >
+                                  Variant: {item.variant}
+                                </Text>
+                              )}
+                              <Group gap={4}>
+                                <Text 
+                                  size={{ base: '0.75rem', sm: '0.875rem' }} 
+                                  fw={600} 
+                                  c="purple"
+                                  style={{ fontSize: '0.875rem' }}
+                                >
+                                  {formatAmount(item.price)}
+                                </Text>
+                                {item.originalPrice && (
+                                  <Text 
+                                    size="xs" 
+                                    td="line-through" 
+                                    c="dimmed"
+                                    style={{ fontSize: '0.75rem' }}
+                                  >
+                                    {formatAmount(item.originalPrice)}
+                                  </Text>
+                                )}
+                              </Group>
+                            </div>
+                          </Group>
+                        </Group>
+                      </div>
+                    </Card>
                   ))}
                 </Stack>
 
@@ -364,37 +492,86 @@ export default function CheckoutPage() {
                 {/* Price Breakdown */}
                 <Stack gap="xs">
                   <Group justify="space-between">
-                    <Text>Subtotal</Text>
-                    <Text>{formatAmount(subtotal)}</Text>
+                    <Text 
+                      size={{ base: '0.75rem', sm: '0.875rem' }} 
+                      c="dimmed"
+                      style={{ fontSize: '0.875rem' }}
+                    >
+                      Subtotal
+                    </Text>
+                    <Text 
+                      size={{ base: '0.75rem', sm: '0.875rem' }} 
+                      fw={500}
+                      style={{ fontSize: '0.875rem' }}
+                    >
+                      {formatAmount(subtotal)}
+                    </Text>
                   </Group>
 
                   <Group justify="space-between">
-                    <Text>Shipping</Text>
-                    <Text c={shipping === 0 ? 'green' : undefined}>
+                    <Text 
+                      size={{ base: '0.75rem', sm: '0.875rem' }} 
+                      c="dimmed"
+                      style={{ fontSize: '0.875rem' }}
+                    >
+                      Shipping
+                    </Text>
+                    <Text 
+                      size={{ base: '0.75rem', sm: '0.875rem' }} 
+                      fw={500} 
+                      c={shipping === 0 ? 'green' : undefined}
+                      style={{ fontSize: '0.875rem' }}
+                    >
                       {shipping === 0 ? 'FREE' : formatAmount(shipping)}
                     </Text>
                   </Group>
 
                   <Group justify="space-between">
-                    <Text>Tax</Text>
-                    <Text>{formatAmount(tax)}</Text>
+                    <Text 
+                      size={{ base: '0.75rem', sm: '0.875rem' }} 
+                      c="dimmed"
+                      style={{ fontSize: '0.875rem' }}
+                    >
+                      Tax
+                    </Text>
+                    <Text 
+                      size={{ base: '0.75rem', sm: '0.875rem' }} 
+                      fw={500}
+                      style={{ fontSize: '0.875rem' }}
+                    >
+                      {formatAmount(tax)}
+                    </Text>
                   </Group>
                 </Stack>
 
                 <Divider />
 
-                <Group justify="space-between">
-                  <Text fw={600} size="lg">
-                    Total
-                  </Text>
-                  <Text fw={600} size="lg" c="purple">
-                    {formatAmount(total)}
-                  </Text>
+                <Group justify="space-between" align="flex-end">
+                  <Stack gap={0}>
+                    <Text 
+                      size={{ base: '0.75rem', sm: '0.875rem' }} 
+                      c="dimmed"
+                      style={{ fontSize: '0.875rem' }}
+                    >
+                      Total Amount
+                    </Text>
+                    <Text 
+                      fw={700} 
+                      size={{ base: '1.125rem', sm: '1.5rem' }} 
+                      c="purple"
+                      style={{ fontSize: '1.5rem' }}
+                    >
+                      {formatAmount(total)}
+                    </Text>
+                  </Stack>
+                  <Stack gap={2} align="flex-end">
+                    <Group gap={4}>
+                      <IconShieldCheck size={14} color="var(--mantine-color-green-6)" />
+                      <Text size="xs" c="dimmed">Secure checkout</Text>
+                    </Group>
+                    <Text size="xs" c="dimmed">SSL encryption enabled</Text>
+                  </Stack>
                 </Group>
-
-                <Text size="xs" c="dimmed" ta="center">
-                  Secure checkout powered by SSL encryption
-                </Text>
               </Stack>
             </Card>
           </Grid.Col>

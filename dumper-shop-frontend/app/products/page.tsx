@@ -271,11 +271,6 @@ export default function ProductsPage() {
           offset: (currentPage - 1) * PRODUCTS_PER_PAGE,
         };
 
-        // Add search query
-        if (searchQuery) {
-          queryParams.q = searchQuery;
-        }
-
         // Add category filter
         if (selectedCategory) {
           queryParams.category_id = [selectedCategory];
@@ -291,22 +286,86 @@ export default function ProductsPage() {
           queryParams.order = mapSortToMedusaOrder(sortBy);
         }
 
-        console.log('Fetching products with params:', queryParams);
-        const response = await sdk.store.product.list(queryParams);
-        console.log('Products response:', response);
-        // Support multiple possible response shapes
         let fetchedProducts: Product[] = [];
         let total = 0;
 
-        if (response?.products) {
-          fetchedProducts = response.products;
-          total = response.count ?? response.total ?? fetchedProducts.length;
-        } else if (Array.isArray(response)) {
-          fetchedProducts = response as Product[];
-          total = fetchedProducts.length;
-        } else if (response?.data?.products) {
-          fetchedProducts = response.data.products;
-          total = response.data.count ?? fetchedProducts.length;
+        // If there's a search query, we need to search in multiple places
+        if (searchQuery) {
+          // First, search products by name/description
+          const searchResponse = await sdk.store.product.list({
+            ...queryParams,
+            q: searchQuery,
+          });
+
+          let productsByName: Product[] = [];
+          if (searchResponse?.products) {
+            productsByName = searchResponse.products;
+          } else if (Array.isArray(searchResponse)) {
+            productsByName = searchResponse as Product[];
+          } else if (searchResponse?.data?.products) {
+            productsByName = searchResponse.data.products;
+          }
+
+          // Second, search for matching categories
+          try {
+            const categoryResponse: any = await sdk.client.fetch('/store/product-categories', {
+              query: {
+                q: searchQuery,
+              },
+            });
+
+            const matchingCategories = categoryResponse?.product_categories || [];
+
+            if (matchingCategories.length > 0) {
+              // Fetch products from matching categories
+              const categoryIds = matchingCategories.map((c: any) => c.id);
+              const categoryProductsResponse = await sdk.store.product.list({
+                ...queryParams,
+                category_id: categoryIds,
+              });
+
+              let productsByCategory: Product[] = [];
+              if (categoryProductsResponse?.products) {
+                productsByCategory = categoryProductsResponse.products;
+              } else if (Array.isArray(categoryProductsResponse)) {
+                productsByCategory = categoryProductsResponse as Product[];
+              } else if (categoryProductsResponse?.data?.products) {
+                productsByCategory = categoryProductsResponse.data.products;
+              }
+
+              // Merge products, avoiding duplicates
+              const productMap = new Map();
+              productsByName.forEach((p) => productMap.set(p.id, p));
+              productsByCategory.forEach((p) => productMap.set(p.id, p));
+
+              fetchedProducts = Array.from(productMap.values());
+              total = fetchedProducts.length;
+            } else {
+              // No matching categories found, use only products by name
+              fetchedProducts = productsByName;
+              total = searchResponse?.count ?? searchResponse?.total ?? fetchedProducts.length;
+            }
+          } catch (categoryError) {
+            console.error('Failed to search categories:', categoryError);
+            // Fallback to products by name only
+            fetchedProducts = productsByName;
+            total = searchResponse?.count ?? searchResponse?.total ?? fetchedProducts.length;
+          }
+        } else {
+          // No search query, use normal product list
+          const response = await sdk.store.product.list(queryParams);
+          console.log('Products response:', response);
+
+          if (response?.products) {
+            fetchedProducts = response.products;
+            total = response.count ?? response.total ?? fetchedProducts.length;
+          } else if (Array.isArray(response)) {
+            fetchedProducts = response as Product[];
+            total = fetchedProducts.length;
+          } else if (response?.data?.products) {
+            fetchedProducts = response.data.products;
+            total = response.data.count ?? fetchedProducts.length;
+          }
         }
 
         if (isMounted) {
